@@ -10,10 +10,15 @@ This document defines the exact contents, responsibilities, and functionalities 
 * **Code Type:** Jetpack Compose UI Views (`@Composable` functions).
 * **Role:** The entry point of the UI. It renders the screen and coordinates system permissions.
 * **Core Code & Functionality:**
-  - **`ReSpeakApp()`**: Core screen wrapper. Observes `uiState` from `MainViewModel` and renders the correct layout frame (Idle, Active, Warning, or Permissions).
-  - **`PlayPauseButton()`**: Custom Compose Canvas drawing. It morphs shapes (Play triangle to Pause double-lines) and draws the pulsing audio-reactive ring when recording is active.
-  - **`WarningCard()`**: Displays the warning banner when headphones are missing.
-  - **Permission Checkers**: Registers `ActivityResultContracts.RequestPermission` to request `RECORD_AUDIO` and `POST_NOTIFICATIONS` at runtime.
+  - **`ReSpeakApp()`**: Core screen wrapper. Observes ViewModel flows and coordinates transitions between Splash, Onboarding, Permission Required (State 1), and the Main Dashboard.
+  - **Visual States Implementation**:
+    - **`SplashScreen()`**: Displayed for 2.5s on app start with concentric soundwave animations and brand typography. Supports a dark teal background.
+    - **`OnboardingScreen()`**: Implements a 3-slide visual onboarding wizard using illustrations.
+    - **`PermissionScreen()`**: Full-screen permission prompt showing horizontal logo, lock indicator, microphone illustration, privacy text card, and a primary action button to trigger the system permission popup.
+    - **`AboutScreen()`**: Full-screen informational view with back navigation, wordmark, tagline, project metadata, and external hyperlinks.
+    - **`MainDashboard()`**: Unified screen representing States 2 (Idle), 3 (Active), 4 (No Headphones Connected), 5 (Earphones Disconnected Mid-Session), and 6 (Audio focus lost).
+  - **Dynamic Theme Support**: Automatically switches visual tokens between dark linear gradients and light grey panels depending on system theme.
+  - **Device Callback Response**: Integrates audio routing and warning states for wired/wireless headphone connectivity.
 
 ### MainViewModel.kt
 * **Code Type:** AndroidX Lifecycle ViewModel.
@@ -59,15 +64,15 @@ This document defines the exact contents, responsibilities, and functionalities 
   - **Foreground Lifecycle**: Runs `startForeground()` with a persistent lock screen notification.
   - **Notification Handler**: Builds and updates the notification showing the timer and containing a PendingIntent action for the "Pause" button.
   - **WakeLock Manager**: Requests `PARTIAL_WAKE_LOCK` via `PowerManager` to prevent CPU suspension.
-  - **Audio Routing**: Sets `AudioManager.mode = MODE_IN_COMMUNICATION` to prioritize sound latency.
+  - **Audio Routing**: Sets `AudioManager.mode = AudioManager.MODE_NORMAL` to support high-quality A2DP profile.
 
 ### AudioEngine.kt
 * **Code Type:** Low-level Audio API controller.
 * **Role:** Reads raw mic bytes and writes them to speaker output directly.
 * **Core Code & Functionality:**
-  - **`AudioRecord` Init**: Setup with `VOICE_COMMUNICATION` at 48000Hz, 16-bit PCM, Mono.
+  - **`AudioRecord` Init**: Setup with `MediaRecorder.AudioSource.MIC` at 48000Hz, 16-bit PCM, Mono.
   - **`AudioTrack` Init**: Setup in `PERFORMANCE_MODE_LOW_LATENCY` streaming mode.
-  - **Effect Activators**: Instantiates `AcousticEchoCanceler` and `NoiseSuppressor` matching the record session ID to isolate voice feedback.
+  - **Effect Activators**: Instantiates `AcousticEchoCanceler` and `NoiseSuppressor` matching the record session ID if available.
   - **High-Priority Loop**: Launches an urgent background loop:
     ```kotlin
     while (isLooping) {

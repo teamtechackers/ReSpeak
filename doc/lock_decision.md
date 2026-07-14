@@ -58,6 +58,10 @@ graph TD
   2. If optimized, display a user-friendly card/dialog explaining: *"To prevent the audio from stopping when your screen is off, please disable battery optimization for re:speak."*
   3. Direct the user to the system battery optimization settings page using `Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`.
 
+### Decision E: Dual Theme Support (Light and Dark Mode)
+* **Choice:** Support both Light and Dark themes. The Onboarding screen utilizes a clean Light Theme (solid white background `#FFFFFF` with dark teal `#042C34` text/buttons). The Main screen supports dynamic dark/light themes.
+* **Transition Flow:** On launch, the Splash Screen (#042C34) displays -> transitions to the Onboarding Screen (Light Theme, #FFFFFF background) -> transitions to the Main Screen.
+
 ---
 
 ## 3. Lock Screen Lifecycle States

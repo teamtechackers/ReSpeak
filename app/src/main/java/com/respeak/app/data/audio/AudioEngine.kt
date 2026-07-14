@@ -47,8 +47,11 @@ class AudioEngine(private val context: Context) {
     private val _amplitude = MutableStateFlow(0f)
     val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
 
-    fun start() {
+    private var usePhoneMic = true
+
+    fun start(usePhoneMic: Boolean) {
         if (isLooping) return
+        this.usePhoneMic = usePhoneMic
         isLooping = true
         loopThread = Thread({ runLoop() }, "AudioLoopbackEngineThread").apply {
             priority = Thread.MAX_PRIORITY
@@ -75,9 +78,15 @@ class AudioEngine(private val context: Context) {
         val minBufSizeOut = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
         val bufferSize = Math.max(minBufSizeIn, minBufSizeOut) * 2
 
+        val audioSource = if (usePhoneMic) {
+            MediaRecorder.AudioSource.MIC
+        } else {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        }
+
         try {
             audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                audioSource,
                 sampleRate,
                 channelConfigIn,
                 audioFormat,
@@ -100,11 +109,23 @@ class AudioEngine(private val context: Context) {
                 }
             }
 
+            val usage = if (usePhoneMic) {
+                android.media.AudioAttributes.USAGE_MEDIA
+            } else {
+                android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
+            }
+
+            val streamType = if (usePhoneMic) {
+                AudioManager.STREAM_MUSIC
+            } else {
+                AudioManager.STREAM_VOICE_CALL
+            }
+
             audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 AudioTrack.Builder()
                     .setAudioAttributes(
                         android.media.AudioAttributes.Builder()
-                            .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                            .setUsage(usage)
                             .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build()
                     )
@@ -122,7 +143,7 @@ class AudioEngine(private val context: Context) {
             } else {
                 @Suppress("DEPRECATION")
                 AudioTrack(
-                    AudioManager.STREAM_VOICE_CALL,
+                    streamType,
                     sampleRate,
                     channelConfigOut,
                     audioFormat,

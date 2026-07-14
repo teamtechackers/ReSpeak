@@ -39,27 +39,37 @@ class AudioRepositoryImpl(private val context: Context) : AudioRepository {
     private val scope = CoroutineScope(Dispatchers.Default)
 
     private val _hasPermission = MutableStateFlow(true)
+    private val _bypassWarning = MutableStateFlow(false)
 
     override val isHeadsetConnected: StateFlow<Boolean> = audioDeviceManager.isHeadsetConnected
     override val connectedDeviceName: StateFlow<String> = audioDeviceManager.connectedDeviceName
 
     override val loopbackState: StateFlow<LoopbackState> = combine(
-        AudioLoopbackService.isRunning,
-        isHeadsetConnected,
+        combine(
+            AudioLoopbackService.isRunning,
+            AudioLoopbackService.audioFocusLost,
+            isHeadsetConnected
+        ) { isRunning, isFocusLost, isHeadset -> Triple(isRunning, isFocusLost, isHeadset) },
         connectedDeviceName,
-        _hasPermission
-    ) { isRunning, isHeadset, deviceName, hasPermission ->
+        _hasPermission,
+        _bypassWarning
+    ) { triple, deviceName, hasPermission, bypassed ->
+        val (isRunning, isFocusLost, isHeadset) = triple
         when {
             !hasPermission -> LoopbackState.PermissionDenied
-            !isHeadset -> LoopbackState.NoHeadphones
+            !isHeadset && !bypassed -> LoopbackState.NoHeadphones
+            isFocusLost -> LoopbackState.FocusLost
             isRunning -> LoopbackState.Active(System.currentTimeMillis(), deviceName)
             else -> LoopbackState.Idle
         }
     }.stateIn(scope, SharingStarted.Eagerly, LoopbackState.Idle)
 
-    override fun startLoopback() {
+    override fun startLoopback(usePhoneMic: Boolean, bypassWarning: Boolean) {
+        _bypassWarning.value = bypassWarning
         val intent = Intent(context, AudioLoopbackService::class.java).apply {
             action = AudioLoopbackService.ACTION_START
+            putExtra(AudioLoopbackService.EXTRA_USE_PHONE_MIC, usePhoneMic)
+            putExtra(AudioLoopbackService.EXTRA_BYPASS_WARNING, bypassWarning)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
@@ -69,6 +79,7 @@ class AudioRepositoryImpl(private val context: Context) : AudioRepository {
     }
 
     override fun stopLoopback() {
+        _bypassWarning.value = false
         val intent = Intent(context, AudioLoopbackService::class.java).apply {
             action = AudioLoopbackService.ACTION_STOP
         }

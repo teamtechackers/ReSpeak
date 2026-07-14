@@ -31,6 +31,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import android.util.Log
+import android.app.AlarmManager
+import android.os.SystemClock
 import com.respeak.app.MainActivity
 import com.respeak.app.data.audio.AudioDeviceManager
 import com.respeak.app.data.audio.AudioEngine
@@ -48,6 +51,8 @@ class AudioLoopbackService : Service() {
     companion object {
         const val ACTION_START = "com.respeak.app.action.START"
         const val ACTION_STOP = "com.respeak.app.action.STOP"
+        const val EXTRA_USE_PHONE_MIC = "com.respeak.app.extra.USE_PHONE_MIC"
+        const val EXTRA_BYPASS_WARNING = "com.respeak.app.extra.BYPASS_WARNING"
         private const val NOTIFICATION_ID = 101
         private const val CHANNEL_ID = "audio_loopback_channel"
 
@@ -59,6 +64,9 @@ class AudioLoopbackService : Service() {
 
         private val _amplitude = MutableStateFlow(0f)
         val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
+
+        private val _audioFocusLost = MutableStateFlow(false)
+        val audioFocusLost: StateFlow<Boolean> = _audioFocusLost.asStateFlow()
     }
 
     private var audioEngine: AudioEngine? = null
@@ -69,6 +77,58 @@ class AudioLoopbackService : Service() {
     private var timerJob: Job? = null
     private var amplitudeJob: Job? = null
     private var startTimeMillis = 0L
+    private var usePhoneMic = true
+    private var bypassWarning = false
+    private var focusRequest: android.media.AudioFocusRequest? = null
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                Log.d("ReSpeakService", "Audio focus lost ($focusChange). Pausing loopback.")
+                stopLoopback(byFocusLoss = true)
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                Log.d("ReSpeakService", "Audio focus gained.")
+            }
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val am = audioManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setAcceptsDelayedFocusGain(false)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+            focusRequest = request
+            am.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val am = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            focusRequest?.let { am.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            am.abandonAudioFocus(audioFocusChangeListener)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -78,8 +138,13 @@ class AudioLoopbackService : Service() {
 
         serviceScope.launch {
             audioDeviceManager?.isHeadsetConnected?.collect { isConnected ->
-                if (_isRunning.value && !isConnected) {
-                    stopLoopback()
+                if (_isRunning.value && !isConnected && !bypassWarning) {
+                    // Debounce check for 1.5 seconds to prevent transient background disconnect triggers
+                    delay(1500)
+                    if (audioDeviceManager?.isHeadsetConnected?.value == false && !bypassWarning) {
+                        Log.d("ReSpeakService", "Headset disconnection confirmed. Stopping loopback.")
+                        stopLoopback(byFocusLoss = false)
+                    }
                 }
             }
         }
@@ -88,42 +153,85 @@ class AudioLoopbackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startLoopback()
+                val usePhone = intent.getBooleanExtra(EXTRA_USE_PHONE_MIC, true)
+                bypassWarning = intent.getBooleanExtra(EXTRA_BYPASS_WARNING, false)
+                startLoopback(usePhone)
             }
             ACTION_STOP -> {
                 stopLoopback()
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
-    private fun startLoopback() {
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d("ReSpeakService", "App task removed (swiped away from recents). Scheduling service restart...")
+        if (_isRunning.value) {
+            val restartServiceIntent = Intent(applicationContext, this.javaClass).apply {
+                action = ACTION_START
+                putExtra(EXTRA_USE_PHONE_MIC, usePhoneMic)
+            }
+            val restartServicePendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartServiceIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmService.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 1000,
+                restartServicePendingIntent
+            )
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
+    private fun startLoopback(usePhoneMic: Boolean) {
         if (_isRunning.value) return
+
+        this.usePhoneMic = usePhoneMic
+
+        if (!requestAudioFocus()) {
+            Log.d("ReSpeakService", "startLoopback failed: could not obtain audio focus.")
+            _audioFocusLost.value = true
+            return
+        }
+        _audioFocusLost.value = false
 
         createNotificationChannel()
         val notification = createNotification("00:00")
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
 
         acquireWakeLock()
         
-        audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
-        setupAudioRouting()
+        if (usePhoneMic) {
+            audioManager?.mode = AudioManager.MODE_NORMAL
+        } else {
+            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            setupAudioRouting()
+        }
 
         _isRunning.value = true
         startTimeMillis = System.currentTimeMillis()
         
-        audioEngine?.start()
+        Log.d("ReSpeakService", "startLoopback: service running in foreground. usePhoneMic=$usePhoneMic")
+        audioEngine?.start(usePhoneMic)
         startTimer()
         startAmplitudeMonitoring()
     }
 
-    private fun stopLoopback() {
+    private fun stopLoopback(byFocusLoss: Boolean = false) {
         if (!_isRunning.value) return
+        bypassWarning = false
 
         audioEngine?.stop()
         _amplitude.value = 0f
@@ -133,11 +241,16 @@ class AudioLoopbackService : Service() {
         _durationSeconds.value = 0L
 
         releaseWakeLock()
+        abandonAudioFocus()
 
-        clearAudioRouting()
+        if (!usePhoneMic) {
+            clearAudioRouting()
+        }
         audioManager?.mode = AudioManager.MODE_NORMAL
 
         _isRunning.value = false
+        _audioFocusLost.value = byFocusLoss
+        Log.d("ReSpeakService", "stopLoopback: service stopped loopback. byFocusLoss=$byFocusLoss")
         
         stopForeground(true)
         stopSelf()

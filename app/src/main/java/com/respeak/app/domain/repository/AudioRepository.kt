@@ -26,7 +26,7 @@ interface AudioRepository {
     val isHeadsetConnected: StateFlow<Boolean>
     val connectedDeviceName: StateFlow<String>
     
-    fun startLoopback()
+    fun startLoopback(usePhoneMic: Boolean, bypassWarning: Boolean = false)
     fun stopLoopback()
     fun updatePermissionState(granted: Boolean)
 }

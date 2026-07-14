@@ -25,7 +25,9 @@ import com.respeak.app.data.repository.AudioRepositoryImpl
 import com.respeak.app.data.service.AudioLoopbackService
 import com.respeak.app.domain.model.LoopbackState
 import com.respeak.app.domain.repository.AudioRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -39,9 +41,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val durationSeconds: StateFlow<Long> = AudioLoopbackService.durationSeconds
     val audioAmplitude: StateFlow<Float> = AudioLoopbackService.amplitude
 
-    fun startLoopback() {
+    private val _usePhoneMic = MutableStateFlow(true)
+    val usePhoneMic: StateFlow<Boolean> = _usePhoneMic.asStateFlow()
+
+    fun setUsePhoneMic(use: Boolean) {
+        _usePhoneMic.value = use
+    }
+
+    fun startLoopback(bypassWarning: Boolean = false) {
         viewModelScope.launch {
-            repository.startLoopback()
+            repository.startLoopback(_usePhoneMic.value, bypassWarning)
         }
     }
 
