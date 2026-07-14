@@ -76,14 +76,15 @@ fun DashboardScreen(
     val textSecondary = if (isDark) Color.LightGray.copy(alpha = 0.8f) else Color.DarkGray
     val pillBg = if (isDark) Color(0xFF1E222B).copy(alpha = 0.5f) else Color(0xFFE8F1F2)
     val pillBorder = if (isDark) primaryAccent.copy(alpha = 0.35f) else Color(0xFF042C34).copy(alpha = 0.15f)
-    val backgroundBrush = if (isDark) Brush.verticalGradient(colors = listOf(Color(0xFF1E222B), Color(0xFF0B0D10))) else Brush.verticalGradient(colors = listOf(Color(0xFFF2F4F7), Color(0xFFE4E7EC)))
+    val backgroundBrush = if (isDark) Brush.verticalGradient(colors = listOf(Color.Black, Color.Black)) else Brush.verticalGradient(colors = listOf(Color(0xFFF2F4F7), Color(0xFFE4E7EC)))
 
     val pulseScale by animateFloatAsState(targetValue = if (isActive) 1f + amplitude * 0.7f else 1.0f, label = "pulse_scale")
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundBrush).padding(24.dp)) {
         // Top: Logo + Status Pill
         Column(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter), horizontalAlignment = Alignment.CenterHorizontally) {
-            Image(painter = painterResource(id = R.drawable.logo_horizontal), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
+            val logoRes = if (isDark) R.drawable.logo_horizontal_dark else R.drawable.logo_horizontal
+            Image(painter = painterResource(id = logoRes), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
             Spacer(modifier = Modifier.height(16.dp))
             val pillText = when {
                 !isHeadsetConnected -> "Speaker Mode"

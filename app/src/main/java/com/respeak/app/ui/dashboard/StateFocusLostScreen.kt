@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,15 +40,30 @@ fun StateFocusLostScreen(durationSeconds: Long) {
     val seconds = durationSeconds % 60
     val timeString = String.format("%02d:%02d", minutes, seconds)
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.White).padding(24.dp)) {
+    val isDark = isSystemInDarkTheme()
+    
+    // Dynamic theme mapping matching the mockup screenshots
+    val bgColor = if (isDark) Color.Black else Color.White
+    val textPrimary = if (isDark) Color.White else Color.Black
+    val textSecondary = if (isDark) Color.LightGray.copy(alpha = 0.8f) else Color.Gray
+    val cardBg = if (isDark) Color(0xFF1E222B).copy(alpha = 0.5f) else Color(0xFFFFF5EB).copy(alpha = 0.5f)
+    val cardBorder = if (isDark) Color(0xFFFF9F1C).copy(alpha = 0.25f) else Color(0xFFFF9F1C).copy(alpha = 0.1f)
+    val infoTextColor = if (isDark) Color(0xFFFF9F1C) else Color(0xFFFF9F1C)
+
+    Box(modifier = Modifier.fillMaxSize().background(bgColor).padding(24.dp)) {
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
             // Header logo
-            Image(painter = painterResource(id = R.drawable.logo_horizontal), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
+            val logoRes = if (isDark) R.drawable.logo_horizontal_dark else R.drawable.logo_horizontal
+            Image(painter = painterResource(id = logoRes), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Warning pill
-            Surface(shape = RoundedCornerShape(100), color = Color(0xFFFFF5EB), border = BorderStroke(1.dp, Color(0xFFFF9F1C).copy(alpha = 0.15f))) {
+            Surface(
+                shape = RoundedCornerShape(100), 
+                color = if (isDark) Color(0xFFFF9F1C).copy(alpha = 0.15f) else Color(0xFFFFF5EB), 
+                border = BorderStroke(1.dp, if (isDark) Color(0xFFFF9F1C).copy(alpha = 0.35f) else Color(0xFFFF9F1C).copy(alpha = 0.15f))
+            ) {
                 Row(modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.Warning, contentDescription = "Warning", tint = Color(0xFFFF9F1C), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
@@ -57,12 +73,13 @@ fun StateFocusLostScreen(durationSeconds: Long) {
 
             // Disabled button - drawn with AudioButton (no white square)
             Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                val waveIndicatorColor = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
                 Canvas(modifier = Modifier.size(240.dp)) {
-                    for (i in 1..3) { drawCircle(color = Color(0xFF042C34).copy(alpha = 0.04f * i), radius = (size.minDimension / 2f) * (i / 3f), style = Stroke(width = 1.dp.toPx())) }
+                    for (i in 1..3) { drawCircle(color = waveIndicatorColor.copy(alpha = 0.04f * i), radius = (size.minDimension / 2f) * (i / 3f), style = Stroke(width = 1.dp.toPx())) }
                 }
                 AudioButton(
                     state = AudioButtonState.DISABLED,
-                    accentColor = Color(0xFF042C34)
+                    accentColor = waveIndicatorColor
                 )
             }
 
@@ -71,20 +88,20 @@ fun StateFocusLostScreen(durationSeconds: Long) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = "Paused", color = Color(0xFFFF9F1C), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "Another app is using audio", color = Color.Gray, fontSize = 14.sp)
+                Text(text = "Another app is using audio", color = textSecondary, fontSize = 14.sp)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             // Info card
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5EB).copy(alpha = 0.5f)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFFF9F1C).copy(alpha = 0.1f)), modifier = Modifier.fillMaxWidth()) {
+            Card(colors = CardDefaults.cardColors(containerColor = cardBg), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, cardBorder), modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Info, contentDescription = "Info", tint = Color(0xFFFF9F1C), modifier = Modifier.size(28.dp))
+                    Icon(imageVector = Icons.Default.Info, contentDescription = "Info", tint = infoTextColor, modifier = Modifier.size(28.dp))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Audio Focus lost", color = Color(0xFFFF9F1C), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Audio Focus lost", color = infoTextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(text = "re:speak is paused because another app needs audio right now.", color = Color(0xFFFF9F1C).copy(alpha = 0.8f), fontSize = 12.sp, lineHeight = 16.sp)
+                        Text(text = "re:speak is paused because another app needs audio right now.", color = infoTextColor.copy(alpha = 0.8f), fontSize = 12.sp, lineHeight = 16.sp)
                     }
                 }
             }

@@ -64,7 +64,7 @@ val MicIcon: ImageVector
 @Composable
 fun PermissionScreen(onRequestPermission: () -> Unit) {
     val isDark = isSystemInDarkTheme()
-    val bgColor = if (isDark) Color(0xFF11141A) else Color.White
+    val bgColor = if (isDark) Color.Black else Color.White
     val textColor = if (isDark) Color.White else Color.Black
     val textDescColor = if (isDark) Color.LightGray.copy(alpha = 0.8f) else Color.Gray
     val pillBg = if (isDark) Color(0xFF1E222B).copy(alpha = 0.5f) else Color(0xFFE8F1F2)
@@ -76,12 +76,13 @@ fun PermissionScreen(onRequestPermission: () -> Unit) {
     val cardBorder = if (isDark) Color(0xFF00F5D4).copy(alpha = 0.15f) else Color(0xFF042C34).copy(alpha = 0.1f)
     val cardTextTitle = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
     val cardTextDesc = if (isDark) Color.White.copy(alpha = 0.8f) else Color(0xFF042C34).copy(alpha = 0.8f)
-    val buttonColor = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
-    val buttonTextColor = if (isDark) Color.Black else Color.White
+    val buttonColor = Color(0xFF042C34)
+    val buttonTextColor = Color.White
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor).padding(24.dp)) {
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
-            Image(painter = painterResource(id = R.drawable.logo_horizontal), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
+            val logoRes = if (isDark) R.drawable.logo_horizontal_dark else R.drawable.logo_horizontal
+            Image(painter = painterResource(id = logoRes), contentDescription = "re:speak horizontal logo", modifier = Modifier.width(220.dp).height(56.dp).padding(top = 8.dp))
             Spacer(modifier = Modifier.height(16.dp))
             Surface(shape = RoundedCornerShape(100), color = pillBg, border = BorderStroke(1.dp, pillBorder)) {
                 Row(modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

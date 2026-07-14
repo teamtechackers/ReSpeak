@@ -49,11 +49,11 @@ fun OnboardingScreen(onNext: () -> Unit) {
         "Listen to your patterns, build confidence, and communicate with more clarity."
     )
 
-    val bgColor = if (isDark) Color(0xFF11141A) else Color.White
+    val bgColor = if (isDark) Color.Black else Color.White
     val textColor = if (isDark) Color.White else Color.Black
     val textDescColor = if (isDark) Color.LightGray.copy(alpha = 0.8f) else Color.Gray
-    val buttonColor = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
-    val buttonTextColor = if (isDark) Color.Black else Color.White
+    val buttonColor = Color(0xFF042C34)
+    val buttonTextColor = Color.White
     val indicatorActiveColor = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
     val indicatorInactiveColor = if (isDark) Color.Gray.copy(alpha = 0.5f) else Color.LightGray
 

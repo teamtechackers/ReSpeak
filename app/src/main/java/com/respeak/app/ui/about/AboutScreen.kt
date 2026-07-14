@@ -40,7 +40,7 @@ import com.respeak.app.R
 fun AboutScreen(onBack: () -> Unit) {
     val isDark = isSystemInDarkTheme()
     val uriHandler = LocalUriHandler.current
-    val bgColor = if (isDark) Color(0xFF11141A) else Color.White
+    val bgColor = if (isDark) Color.Black else Color.White
     val textColor = if (isDark) Color.White else Color.Black
     val textSecondary = if (isDark) Color.LightGray else Color.Gray
     val containerBg = if (isDark) Color(0xFF1E222B) else Color(0xFFF8F9FA)
@@ -54,7 +54,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 Text(text = "re:speak", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             }
             Spacer(modifier = Modifier.height(32.dp))
-            Image(painter = painterResource(id = R.drawable.logo_horizontal), contentDescription = "re:speak logo horizontal", modifier = Modifier.width(220.dp).height(56.dp))
+            val logoRes = if (isDark) R.drawable.logo_horizontal_dark else R.drawable.logo_horizontal
+            Image(painter = painterResource(id = logoRes), contentDescription = "re:speak logo horizontal", modifier = Modifier.width(220.dp).height(56.dp))
             Spacer(modifier = Modifier.height(8.dp))
             Text(text = "Hear yourself . Improve yourself", color = brandTagColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(32.dp))

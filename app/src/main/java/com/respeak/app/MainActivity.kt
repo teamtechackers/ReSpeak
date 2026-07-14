@@ -60,8 +60,9 @@ fun ReSpeakApp(
     val loopbackState by viewModel.loopbackState.collectAsStateWithLifecycle()
     val isHeadsetConnected by viewModel.isHeadsetConnected.collectAsStateWithLifecycle()
 
+    val sharedPrefs = remember { context.getSharedPreferences("respeak_prefs", android.content.Context.MODE_PRIVATE) }
     var showSplash by remember { mutableStateOf(true) }
-    var showOnboarding by remember { mutableStateOf(true) }
+    var showOnboarding by remember { mutableStateOf(sharedPrefs.getBoolean("show_onboarding", true)) }
     var showAbout by remember { mutableStateOf(false) }
     var wasActiveBeforeDisconnect by remember { mutableStateOf(false) }
 
@@ -100,7 +101,10 @@ fun ReSpeakApp(
     } else {
         Box(modifier = modifier.fillMaxSize()) {
             if (showOnboarding) {
-                OnboardingScreen(onNext = { showOnboarding = false })
+                OnboardingScreen(onNext = {
+                    sharedPrefs.edit().putBoolean("show_onboarding", false).apply()
+                    showOnboarding = false
+                })
             } else if (showAbout) {
                 AboutScreen(onBack = { showAbout = false })
             } else if (!micPermissionGranted) {
