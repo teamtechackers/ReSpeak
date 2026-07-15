@@ -35,7 +35,7 @@ import com.respeak.app.ui.components.AudioButton
 import com.respeak.app.ui.components.AudioButtonState
 
 @Composable
-fun StateFocusLostScreen(durationSeconds: Long) {
+fun StateFocusLostScreen(durationSeconds: Long, onResume: () -> Unit) {
     val minutes = durationSeconds / 60
     val seconds = durationSeconds % 60
     val timeString = String.format("%02d:%02d", minutes, seconds)
@@ -71,15 +71,16 @@ fun StateFocusLostScreen(durationSeconds: Long) {
                 }
             }
 
-            // Disabled button - drawn with AudioButton (no white square)
+            // Clickable play button to resume from paused state
             Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
                 val waveIndicatorColor = if (isDark) Color(0xFF00F5D4) else Color(0xFF042C34)
                 Canvas(modifier = Modifier.size(240.dp)) {
                     for (i in 1..3) { drawCircle(color = waveIndicatorColor.copy(alpha = 0.04f * i), radius = (size.minDimension / 2f) * (i / 3f), style = Stroke(width = 1.dp.toPx())) }
                 }
                 AudioButton(
-                    state = AudioButtonState.DISABLED,
-                    accentColor = waveIndicatorColor
+                    state = AudioButtonState.PLAY,
+                    accentColor = waveIndicatorColor,
+                    onClick = onResume
                 )
             }
 

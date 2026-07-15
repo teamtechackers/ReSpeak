@@ -55,7 +55,7 @@ fun MainDashboard(
     } else if (!isHeadsetConnected && wasActiveBeforeDisconnect) {
         StateWarningScreen(title = "Earphones disconnected", badgeColor = Color(0xFFFF4D4D), badgeBgColor = Color(0xFFFFEBEB), isStateFive = true, onContinue = { viewModel.startLoopback(bypassWarning = true) }, onCancel = { viewModel.stopLoopback(); setWasActiveBeforeDisconnect(false) })
     } else if (isFocusLost) {
-        StateFocusLostScreen(durationSeconds = durationSeconds)
+        StateFocusLostScreen(durationSeconds = durationSeconds, onResume = { viewModel.startLoopback(bypassWarning = true) })
     } else {
         DashboardScreen(viewModel = viewModel, loopbackState = loopbackState, isHeadsetConnected = isHeadsetConnected, isDark = isSystemDark, onOpenAbout = onOpenAbout)
     }
@@ -132,10 +132,14 @@ fun DashboardScreen(
             if (isActive) {
                 val minutes = durationSeconds / 60; val seconds = durationSeconds % 60
                 Text(text = String.format("%02d:%02d", minutes, seconds), color = textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Listening", color = textSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Your voice will play back instantly\nthrough your connected earphones.", color = textSecondary.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = "Latency   22 ms", color = textSecondary.copy(alpha = 0.6f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             } else {
                 Text(text = "Tap to Start Listening", color = textSecondary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                Text(text = "Your voice will play back instantly\nthrough your connected earphones.", color = textSecondary.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Your voice will play back instantly\nthrough your connected earphones.", color = textSecondary.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
             }
         }
 

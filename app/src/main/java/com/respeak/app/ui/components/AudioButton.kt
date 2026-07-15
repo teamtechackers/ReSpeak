@@ -12,8 +12,10 @@ package com.respeak.app.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -21,6 +23,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
@@ -35,12 +38,20 @@ fun AudioButton(
 ) {
     // Teal glow color matching the mockup
     val glowColor = Color(0xFF00F5D4)
-    val iconColor = if (state == AudioButtonState.DISABLED) Color(0xFFB0B8C1) else accentColor
 
     Canvas(
         modifier = modifier
             .size(320.dp, 220.dp)
-            .then(if (state != AudioButtonState.DISABLED) Modifier.clickable { onClick() } else Modifier)
+            .then(
+                if (state != AudioButtonState.DISABLED) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        onClick()
+                    }
+                } else Modifier
+            )
     ) {
         val centerX = size.width / 2f
         val centerY = size.height / 2f
@@ -187,6 +198,17 @@ fun AudioButton(
             center = Offset(centerX, centerY - buttonRadius - 16.dp.toPx())
         )
 
+        // Gradient Brush for Icons
+        val iconBrush = if (state == AudioButtonState.DISABLED) {
+            SolidColor(Color(0xFFB0B8C1))
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF007A8C), Color(0xFF00F5D4)),
+                startY = centerY - 20.dp.toPx(),
+                endY = centerY + 20.dp.toPx()
+            )
+        }
+
         // === PLAY / PAUSE ICON ===
         if (state == AudioButtonState.PLAY || state == AudioButtonState.DISABLED) {
             val triPath = Path().apply {
@@ -195,19 +217,19 @@ fun AudioButton(
                 lineTo(centerX - 12.dp.toPx(), centerY + 20.dp.toPx())
                 close()
             }
-            drawPath(triPath, color = iconColor)
+            drawPath(triPath, brush = iconBrush)
         } else {
             val pBarW = 9.dp.toPx()
             val pBarH = 32.dp.toPx()
             val pGap = 6.dp.toPx()
             drawRoundRect(
-                color = iconColor,
+                brush = iconBrush,
                 topLeft = Offset(centerX - pGap - pBarW, centerY - pBarH / 2),
                 size = Size(pBarW, pBarH),
                 cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
             )
             drawRoundRect(
-                color = iconColor,
+                brush = iconBrush,
                 topLeft = Offset(centerX + pGap, centerY - pBarH / 2),
                 size = Size(pBarW, pBarH),
                 cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())

@@ -27,8 +27,12 @@ import androidx.compose.ui.unit.sp
 import com.respeak.app.R
 import kotlinx.coroutines.delay
 
+import androidx.compose.foundation.isSystemInDarkTheme
+
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
+    val isDark = isSystemInDarkTheme()
+
     LaunchedEffect(Unit) {
         delay(2500)
         onTimeout()
@@ -37,18 +41,27 @@ fun SplashScreen(onTimeout: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF042C34)),
+            .background(if (isDark) Color.Black else Color.Transparent),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val maxRadius = size.minDimension / 1.1f
-            for (i in 1..4) {
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.03f * i),
-                    radius = maxRadius * (i / 4f),
-                    style = Stroke(width = 1.dp.toPx())
-                )
+        if (isDark) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val maxRadius = size.minDimension / 1.1f
+                for (i in 1..4) {
+                    drawCircle(
+                        color = Color(0xFF00F5D4).copy(alpha = 0.03f * i),
+                        radius = maxRadius * (i / 4f),
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
             }
+        } else {
+            Image(
+                painter = painterResource(id = R.drawable.splash_bg),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         Column(

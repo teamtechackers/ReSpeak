@@ -83,14 +83,18 @@ class AudioLoopbackService : Service() {
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                Log.d("ReSpeakService", "Permanent audio focus loss. Stopping loopback.")
+                stopLoopback(byFocusLoss = false)
+            }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                Log.d("ReSpeakService", "Audio focus lost ($focusChange). Pausing loopback.")
-                stopLoopback(byFocusLoss = true)
+                Log.d("ReSpeakService", "Transient audio focus lost. Pausing loopback.")
+                pauseLoopback()
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                Log.d("ReSpeakService", "Audio focus gained.")
+                Log.d("ReSpeakService", "Audio focus gained. Resuming loopback.")
+                resumeLoopback()
             }
         }
     }
@@ -186,7 +190,12 @@ class AudioLoopbackService : Service() {
     }
 
     private fun startLoopback(usePhoneMic: Boolean) {
-        if (_isRunning.value) return
+        if (_isRunning.value) {
+            if (_audioFocusLost.value) {
+                resumeLoopback()
+            }
+            return
+        }
 
         this.usePhoneMic = usePhoneMic
 
@@ -249,11 +258,51 @@ class AudioLoopbackService : Service() {
         audioManager?.mode = AudioManager.MODE_NORMAL
 
         _isRunning.value = false
-        _audioFocusLost.value = byFocusLoss
-        Log.d("ReSpeakService", "stopLoopback: service stopped loopback. byFocusLoss=$byFocusLoss")
+        _audioFocusLost.value = false
+        Log.d("ReSpeakService", "stopLoopback: service stopped loopback.")
         
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
+    }
+
+    private fun pauseLoopback() {
+        if (!_isRunning.value) return
+        audioEngine?.stop()
+        _amplitude.value = 0f
+        timerJob?.cancel()
+        amplitudeJob?.cancel()
+        _audioFocusLost.value = true
+        
+        val elapsed = (System.currentTimeMillis() - startTimeMillis) / 1000
+        updateNotification("Paused · ${formatDuration(elapsed)}")
+        Log.d("ReSpeakService", "pauseLoopback: service paused loopback.")
+    }
+
+    private fun resumeLoopback() {
+        if (!_isRunning.value || !_audioFocusLost.value) return
+        if (!requestAudioFocus()) {
+            Log.d("ReSpeakService", "resumeLoopback failed: could not regain audio focus.")
+            return
+        }
+        _audioFocusLost.value = false
+        startTimeMillis = System.currentTimeMillis() - (_durationSeconds.value * 1000)
+        
+        if (usePhoneMic) {
+            audioManager?.mode = AudioManager.MODE_NORMAL
+        } else {
+            audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
+            setupAudioRouting()
+        }
+        
+        audioEngine?.start(usePhoneMic)
+        startTimer()
+        startAmplitudeMonitoring()
+        Log.d("ReSpeakService", "resumeLoopback: service resumed loopback.")
     }
 
     private fun startTimer() {
