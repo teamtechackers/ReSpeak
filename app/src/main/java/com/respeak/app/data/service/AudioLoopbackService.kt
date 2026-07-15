@@ -93,8 +93,7 @@ class AudioLoopbackService : Service() {
                 pauseLoopback()
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                Log.d("ReSpeakService", "Audio focus gained. Resuming loopback.")
-                resumeLoopback()
+                Log.d("ReSpeakService", "Audio focus gained. Kept paused for manual user action.")
             }
         }
     }
