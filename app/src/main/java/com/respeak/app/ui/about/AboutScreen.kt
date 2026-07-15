@@ -72,11 +72,9 @@ fun AboutScreen(onBack: () -> Unit) {
                 HorizontalDivider(color = borderCol)
                 AboutListRow(label = "License", value = "GNU GPL v3", isDark = isDark)
                 HorizontalDivider(color = borderCol)
-                AboutListRow(label = "GitHub", clickable = true, isDark = isDark, onClick = { uriHandler.openUri("https://github.com/GhulamShahbazali/ReSpeak") })
+                AboutListRow(label = "GitHub", clickable = true, isDark = isDark, onClick = { uriHandler.openUri("https://github.com/GhulamShahbazali/ReSpeak.git") })
                 HorizontalDivider(color = borderCol)
-                AboutListRow(label = "Report an issue", clickable = true, isDark = isDark, onClick = { uriHandler.openUri("https://github.com/GhulamShahbazali/ReSpeak/issues") })
-                HorizontalDivider(color = borderCol)
-                AboutListRow(label = "Privacy", clickable = true, isDark = isDark, onClick = { uriHandler.openUri("https://github.com/GhulamShahbazali/ReSpeak/blob/main/PRIVACY.md") })
+                AboutListRow(label = "Report an issue", clickable = true, isDark = isDark, onClick = { uriHandler.openUri("https://github.com/GhulamShahbazali/ReSpeak.git") })
             }
             Spacer(modifier = Modifier.height(48.dp))
             Text(text = "© 2026 re:speak\nLicensed under GNU GPL v3", color = textSecondary.copy(alpha = 0.7f), fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 24.dp))
