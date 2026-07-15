@@ -16,16 +16,20 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.respeak.app.domain.model.LoopbackState
@@ -43,9 +47,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ReSpeakTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ReSpeakApp(modifier = Modifier.padding(innerPadding))
-                }
+                ReSpeakApp()
             }
         }
     }
@@ -80,6 +82,19 @@ fun ReSpeakApp(
         }
     }
 
+    val isDark = isSystemInDarkTheme()
+    val view = LocalView.current
+    if (!view.isInEditMode && !showSplash) {
+        LaunchedEffect(isDark) {
+            val window = (view.context as? android.app.Activity)?.window
+            if (window != null) {
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
+            }
+        }
+    }
+
     val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
     } else {
@@ -99,27 +114,30 @@ fun ReSpeakApp(
     if (showSplash) {
         SplashScreen(onTimeout = { showSplash = false })
     } else {
-        Box(modifier = modifier.fillMaxSize()) {
-            if (showOnboarding) {
-                OnboardingScreen(onNext = {
-                    sharedPrefs.edit().putBoolean("show_onboarding", false).apply()
-                    showOnboarding = false
-                })
-            } else if (showAbout) {
-                AboutScreen(onBack = { showAbout = false })
-            } else if (!micPermissionGranted) {
-                PermissionScreen(onRequestPermission = {
-                    requestPermissionsLauncher.launch(permissionsToRequest)
-                })
-            } else {
-                MainDashboard(
-                    viewModel = viewModel,
-                    loopbackState = loopbackState,
-                    isHeadsetConnected = isHeadsetConnected,
-                    onOpenAbout = { showAbout = true },
-                    wasActiveBeforeDisconnect = wasActiveBeforeDisconnect,
-                    setWasActiveBeforeDisconnect = { wasActiveBeforeDisconnect = it }
-                )
+        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                if (showOnboarding) {
+                    OnboardingScreen(onNext = {
+                        sharedPrefs.edit().putBoolean("show_onboarding", false).apply()
+                        showOnboarding = false
+                    })
+                } else if (showAbout) {
+                    BackHandler { showAbout = false }
+                    AboutScreen(onBack = { showAbout = false })
+                } else if (!micPermissionGranted) {
+                    PermissionScreen(onRequestPermission = {
+                        requestPermissionsLauncher.launch(permissionsToRequest)
+                    })
+                } else {
+                    MainDashboard(
+                        viewModel = viewModel,
+                        loopbackState = loopbackState,
+                        isHeadsetConnected = isHeadsetConnected,
+                        onOpenAbout = { showAbout = true },
+                        wasActiveBeforeDisconnect = wasActiveBeforeDisconnect,
+                        setWasActiveBeforeDisconnect = { wasActiveBeforeDisconnect = it }
+                    )
+                }
             }
         }
     }

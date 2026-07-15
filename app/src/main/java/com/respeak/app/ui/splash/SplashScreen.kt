@@ -32,6 +32,18 @@ import androidx.compose.foundation.isSystemInDarkTheme
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
     val isDark = isSystemInDarkTheme()
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        val context = view.context
+        LaunchedEffect(Unit) {
+            val window = (context as? android.app.Activity)?.window
+            if (window != null) {
+                val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = false
+                insetsController.isAppearanceLightNavigationBars = false
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(2500)

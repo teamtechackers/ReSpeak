@@ -102,7 +102,7 @@ class AudioLoopbackService : Service() {
     private fun requestAudioFocus(): Boolean {
         val am = audioManager ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(
                     android.media.AudioAttributes.Builder()
                         .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
@@ -119,7 +119,7 @@ class AudioLoopbackService : Service() {
             am.requestAudioFocus(
                 audioFocusChangeListener,
                 AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                AudioManager.AUDIOFOCUS_GAIN
             ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
     }
