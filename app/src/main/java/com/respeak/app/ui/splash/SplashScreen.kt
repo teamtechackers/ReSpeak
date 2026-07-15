@@ -86,14 +86,5 @@ fun SplashScreen(onTimeout: () -> Unit) {
                 modifier = Modifier.size(240.dp)
             )
         }
-
-        Text(
-            text = "Licensed under GNU GPL v3. Free and open-source.",
-            color = Color.White.copy(alpha = 0.35f),
-            fontSize = 11.sp,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-        )
     }
 }
