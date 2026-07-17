@@ -27,6 +27,7 @@ import android.media.AudioDeviceInfo
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.media.audiofx.AutomaticGainControl
 import android.os.Build
 import android.os.Process
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +45,7 @@ class AudioEngine(private val context: Context) {
 
     private var echoCanceler: AcousticEchoCanceler? = null
     private var noiseSuppressor: NoiseSuppressor? = null
+    private var automaticGainControl: AutomaticGainControl? = null
 
     private val _amplitude = MutableStateFlow(0f)
     val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
@@ -130,24 +132,41 @@ class AudioEngine(private val context: Context) {
                 }
             }
 
-            // Only enable AEC/NS when using phone mic (speaker feedback risk).
-            // With external headset, there is no echo loop, and these add latency.
             val sessionId = audioRecord?.audioSessionId ?: 0
-            if (usePhoneMic && sessionId != 0) {
-                if (AcousticEchoCanceler.isAvailable()) {
-                    echoCanceler = AcousticEchoCanceler.create(sessionId)
-                    echoCanceler?.enabled = true
-                }
-                if (NoiseSuppressor.isAvailable()) {
-                    noiseSuppressor = NoiseSuppressor.create(sessionId)
-                    noiseSuppressor?.enabled = true
+            if (sessionId != 0) {
+                if (usePhoneMic) {
+                    // Only enable AEC/NS when using phone mic (speaker feedback risk).
+                    if (AcousticEchoCanceler.isAvailable()) {
+                        echoCanceler = AcousticEchoCanceler.create(sessionId)
+                        echoCanceler?.enabled = true
+                    }
+                    if (NoiseSuppressor.isAvailable()) {
+                        noiseSuppressor = NoiseSuppressor.create(sessionId)
+                        noiseSuppressor?.enabled = true
+                    }
+                } else {
+                    // Enable AGC for external headsets to boost low mic input levels
+                    if (AutomaticGainControl.isAvailable()) {
+                        automaticGainControl = AutomaticGainControl.create(sessionId)
+                        automaticGainControl?.enabled = true
+                        android.util.Log.d("AudioEngine", "AutomaticGainControl enabled for BT/Headset mic")
+                    }
                 }
             }
 
-            // Always use MEDIA usage — VOICE_COMMUNICATION stream adds voice-call
-            // processing latency and forces low-quality SCO output path.
-            val usage = android.media.AudioAttributes.USAGE_MEDIA
-            val streamType = AudioManager.STREAM_MUSIC
+            // Route audio attributes correctly based on active mic.
+            // Bluetooth SCO requires VOICE_COMMUNICATION to utilize maximum hardware call volume.
+            val usage = if (usePhoneMic) {
+                android.media.AudioAttributes.USAGE_MEDIA
+            } else {
+                android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
+            }
+
+            val streamType = if (usePhoneMic) {
+                AudioManager.STREAM_MUSIC
+            } else {
+                AudioManager.STREAM_VOICE_CALL
+            }
 
             audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 AudioTrack.Builder()
@@ -184,15 +203,29 @@ class AudioEngine(private val context: Context) {
                 throw IOException("AudioTrack failed to initialize")
             }
 
+            // Set AudioTrack volume to maximum
+            audioTrack?.setVolume(AudioTrack.getMaxVolume())
+
             audioRecord?.startRecording()
             audioTrack?.play()
 
-            val chunkSize = 256
+            // Query native buffer size to prevent under/overflow dropouts (missing words)
+            val nativeBufferSizeStr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+            val nativeBufferSize = nativeBufferSizeStr?.toIntOrNull() ?: 256
+            val chunkSize = nativeBufferSize.coerceIn(256, 512)
             val buffer = ShortArray(chunkSize)
+            val gain = 5.0f // Gain multiplier (complements native AGC)
+
+            android.util.Log.d("AudioEngine", "Starting loop with chunkSize=$chunkSize, gain=$gain")
 
             while (isLooping && !Thread.currentThread().isInterrupted) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                 if (read > 0) {
+                    // Apply digital gain boost
+                    for (i in 0 until read) {
+                        val amplified = (buffer[i] * gain).toInt()
+                        buffer[i] = amplified.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                    }
                     audioTrack?.write(buffer, 0, read)
                     calculateAmplitude(buffer, read)
                 }
@@ -221,6 +254,8 @@ class AudioEngine(private val context: Context) {
             echoCanceler = null
             noiseSuppressor?.release()
             noiseSuppressor = null
+            automaticGainControl?.release()
+            automaticGainControl = null
 
             audioRecord?.stop()
             audioRecord?.release()
