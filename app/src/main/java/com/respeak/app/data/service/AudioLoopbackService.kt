@@ -228,23 +228,15 @@ class AudioLoopbackService : Service() {
         if (this.usePhoneMic) {
             audioManager?.mode = AudioManager.MODE_NORMAL
             Log.d("ReSpeakService", "startLoopback: MODE_NORMAL, usePhoneMic=true")
-            audioEngine?.start(true)
-            startTimer()
-            startAmplitudeMonitoring()
         } else {
             audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
             setupAudioRouting()
-            Log.d("ReSpeakService", "startLoopback: MODE_IN_COMMUNICATION, waiting for Bluetooth SCO...")
-            // Bluetooth SCO connection takes 1-2 seconds to establish.
-            // Delay audio engine start to allow the SCO link to come up.
-            serviceScope.launch {
-                delay(2000L)
-                Log.d("ReSpeakService", "startLoopback: SCO delay done, starting audio engine with Bluetooth mic")
-                audioEngine?.start(false)
-                startTimer()
-                startAmplitudeMonitoring()
-            }
+            Log.d("ReSpeakService", "startLoopback: MODE_IN_COMMUNICATION, Bluetooth SCO requested")
         }
+
+        audioEngine?.start(this.usePhoneMic)
+        startTimer()
+        startAmplitudeMonitoring()
     }
 
     private fun stopLoopback(byFocusLoss: Boolean = false) {

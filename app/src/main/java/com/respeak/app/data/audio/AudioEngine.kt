@@ -81,11 +81,10 @@ class AudioEngine(private val context: Context) {
         val minBufSizeOut = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
         val bufferSize = Math.max(minBufSizeIn, minBufSizeOut) * 2
 
-        val audioSource = if (usePhoneMic) {
-            MediaRecorder.AudioSource.MIC
-        } else {
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION
-        }
+        // Always use MIC source — VOICE_COMMUNICATION adds heavy system-level
+        // AEC/AGC/NS processing that causes 1-3s latency. Bluetooth mic routing
+        // is handled by setPreferredDevice() below.
+        val audioSource = MediaRecorder.AudioSource.MIC
 
         try {
             audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -131,8 +130,10 @@ class AudioEngine(private val context: Context) {
                 }
             }
 
+            // Only enable AEC/NS when using phone mic (speaker feedback risk).
+            // With external headset, there is no echo loop, and these add latency.
             val sessionId = audioRecord?.audioSessionId ?: 0
-            if (sessionId != 0) {
+            if (usePhoneMic && sessionId != 0) {
                 if (AcousticEchoCanceler.isAvailable()) {
                     echoCanceler = AcousticEchoCanceler.create(sessionId)
                     echoCanceler?.enabled = true
@@ -143,17 +144,10 @@ class AudioEngine(private val context: Context) {
                 }
             }
 
-            val usage = if (usePhoneMic) {
-                android.media.AudioAttributes.USAGE_MEDIA
-            } else {
-                android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
-            }
-
-            val streamType = if (usePhoneMic) {
-                AudioManager.STREAM_MUSIC
-            } else {
-                AudioManager.STREAM_VOICE_CALL
-            }
+            // Always use MEDIA usage — VOICE_COMMUNICATION stream adds voice-call
+            // processing latency and forces low-quality SCO output path.
+            val usage = android.media.AudioAttributes.USAGE_MEDIA
+            val streamType = AudioManager.STREAM_MUSIC
 
             audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 AudioTrack.Builder()
