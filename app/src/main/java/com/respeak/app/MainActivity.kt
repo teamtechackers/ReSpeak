@@ -68,6 +68,27 @@ fun ReSpeakApp(
     var showAbout by remember { mutableStateOf(false) }
     var wasActiveBeforeDisconnect by remember { mutableStateOf(false) }
 
+    val permissionsToRequest = remember {
+        val list = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            list.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            list.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        list.toTypedArray()
+    }
+
+    val requestPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        viewModel.updatePermissionState(audioGranted)
+        if (!audioGranted) {
+            Toast.makeText(context, "Microphone permission is required.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     val micPermissionGranted = ContextCompat.checkSelfPermission(
         context, Manifest.permission.RECORD_AUDIO
     ) == PackageManager.PERMISSION_GRANTED
@@ -82,6 +103,20 @@ fun ReSpeakApp(
         }
     }
 
+    val bluetoothPermissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
+
+    LaunchedEffect(bluetoothPermissionGranted) {
+        if (!bluetoothPermissionGranted) {
+            requestPermissionsLauncher.launch(permissionsToRequest)
+        }
+    }
+
     val isDark = isSystemInDarkTheme()
     val view = LocalView.current
     if (!view.isInEditMode && !showSplash) {
@@ -92,22 +127,6 @@ fun ReSpeakApp(
                 insetsController.isAppearanceLightStatusBars = !isDark
                 insetsController.isAppearanceLightNavigationBars = !isDark
             }
-        }
-    }
-
-    val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-        arrayOf(Manifest.permission.RECORD_AUDIO)
-    }
-
-    val requestPermissionsLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        viewModel.updatePermissionState(audioGranted)
-        if (!audioGranted) {
-            Toast.makeText(context, "Microphone permission is required.", Toast.LENGTH_LONG).show()
         }
     }
 

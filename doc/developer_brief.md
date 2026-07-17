@@ -16,19 +16,29 @@ This document details the engineering specifications, architectural requirements
 
 ## 2. Audio Engine (Pure Kotlin Loopback)
 
-The loopback operates by reading PCM bytes from `AudioRecord` and writing them instantly into `AudioTrack` on a dedicated high-priority audio thread. The exact routing is determined by the **Input Source Selector**:
+The loopback operates by reading PCM samples from `AudioRecord` and writing them instantly into `AudioTrack` on a dedicated high-priority audio thread. The exact routing is determined automatically based on the connected hardware:
+
+### Automatic Mic Routing Selection
+* **Condition A (Headset has Mic):** If the connected device supports microphone input (e.g., `TYPE_WIRED_HEADSET`, `TYPE_USB_HEADSET`, Bluetooth SCO/BLE headset, or Bluetooth output earbuds connected via `TYPE_BLUETOOTH_A2DP` profile), the app automatically routes to **Option 2: Headset Mic**.
+* **Condition B (Headphones only):** If the connected device does not have a built-in microphone (e.g., wired output `TYPE_WIRED_HEADPHONES`), the app automatically routes to **Option 1: Phone Mic**.
 
 ### Option 1: Phone Mic (High Quality Mode)
 * **Audio Source:** `MediaRecorder.AudioSource.MIC`
 * **AudioManager Mode:** `AudioManager.MODE_NORMAL`
 * **AudioTrack Usage:** `AudioAttributes.USAGE_MEDIA`
-* **Bluetooth Profile:** Standard A2DP playback (captures from phone mic, plays 48kHz stereo to headphones).
+* **Audio Path:** Captures audio from the phone's built-in microphone and routes the playback to the connected headphones.
 
 ### Option 2: Headset Mic (Communication Mode)
 * **Audio Source:** `MediaRecorder.AudioSource.VOICE_COMMUNICATION`
 * **AudioManager Mode:** `AudioManager.MODE_IN_COMMUNICATION`
 * **AudioTrack Usage:** `AudioAttributes.USAGE_VOICE_COMMUNICATION`
-* **Bluetooth Profile:** Bluetooth SCO/HFP routing enabled (captures from headset mic, plays 16kHz mono to headphones).
+* **Audio Path:** Captures audio from the headset's built-in microphone and routes the playback to the headset.
+
+### Low-Latency Configuration (Option 1 Optimization)
+To achieve negligible loopback latency (~10-20 ms):
+1. **Dynamic Sample Rate Selection:** Query `AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE` on launch and initialize audio objects using this native rate to bypass system software resampling.
+2. **Performance Mode Flag:** For both `AudioRecord` (on API 26+) and `AudioTrack` (on API 26+), configure the performance mode strictly to `PERFORMANCE_MODE_LOW_LATENCY`.
+3. **Tiny Chunk Transfers:** Perform the read/write audio loop using a small chunk buffer size of **256 samples (shorts)**. This ensures that audio frames are transferred from input to output every 5.3 ms (at 48kHz).
 
 ### Threading & Execution
 - Run the reading/writing loop in a dedicated background `Thread` (not a standard coroutine dispatcher to avoid scheduling delays).

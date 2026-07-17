@@ -196,7 +196,8 @@ class AudioLoopbackService : Service() {
             return
         }
 
-        this.usePhoneMic = usePhoneMic
+        val hasExternalMic = audioDeviceManager?.hasExternalMicrophone() == true
+        this.usePhoneMic = !hasExternalMic
 
         if (!requestAudioFocus()) {
             Log.d("ReSpeakService", "startLoopback failed: could not obtain audio focus.")
@@ -221,18 +222,19 @@ class AudioLoopbackService : Service() {
 
         acquireWakeLock()
         
-        if (usePhoneMic) {
+        _isRunning.value = true
+        startTimeMillis = System.currentTimeMillis()
+
+        if (this.usePhoneMic) {
             audioManager?.mode = AudioManager.MODE_NORMAL
+            Log.d("ReSpeakService", "startLoopback: MODE_NORMAL, usePhoneMic=true")
         } else {
             audioManager?.mode = AudioManager.MODE_IN_COMMUNICATION
             setupAudioRouting()
+            Log.d("ReSpeakService", "startLoopback: MODE_IN_COMMUNICATION, Bluetooth SCO requested")
         }
 
-        _isRunning.value = true
-        startTimeMillis = System.currentTimeMillis()
-        
-        Log.d("ReSpeakService", "startLoopback: service running in foreground. usePhoneMic=$usePhoneMic")
-        audioEngine?.start(usePhoneMic)
+        audioEngine?.start(this.usePhoneMic)
         startTimer()
         startAmplitudeMonitoring()
     }
@@ -291,6 +293,9 @@ class AudioLoopbackService : Service() {
         _audioFocusLost.value = false
         startTimeMillis = System.currentTimeMillis() - (_durationSeconds.value * 1000)
         
+        val hasExternalMic = audioDeviceManager?.hasExternalMicrophone() == true
+        this.usePhoneMic = !hasExternalMic
+
         if (usePhoneMic) {
             audioManager?.mode = AudioManager.MODE_NORMAL
         } else {
@@ -397,7 +402,18 @@ class AudioLoopbackService : Service() {
     private fun setupAudioRouting() {
         val am = audioManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Check if BLUETOOTH_CONNECT permission is granted
+            val btPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.BLUETOOTH_CONNECT
+            )
+            Log.d("ReSpeakService", "setupAudioRouting: BLUETOOTH_CONNECT permission=${if (btPermission == android.content.pm.PackageManager.PERMISSION_GRANTED) "GRANTED" else "DENIED"}")
+
             val devices = am.availableCommunicationDevices
+            Log.d("ReSpeakService", "setupAudioRouting: availableCommunicationDevices count=${devices.size}")
+            for (d in devices) {
+                Log.d("ReSpeakService", "  -> device type=${d.type}, name=${d.productName}, isSink=${d.isSink}, isSource=${d.isSource}")
+            }
+
             val targetDevice = devices.firstOrNull {
                 it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                         it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
@@ -406,14 +422,28 @@ class AudioLoopbackService : Service() {
                         it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
                         it.type == AudioDeviceInfo.TYPE_USB_HEADSET
             }
+
             if (targetDevice != null) {
-                am.setCommunicationDevice(targetDevice)
+                val success = am.setCommunicationDevice(targetDevice)
+                Log.d("ReSpeakService", "setupAudioRouting: setCommunicationDevice type=${targetDevice.type} name=${targetDevice.productName} success=$success")
+            } else {
+                Log.w("ReSpeakService", "setupAudioRouting: No suitable communication device found, falling back to startBluetoothSco")
+                // Fallback: try legacy SCO start even on Android 12+
+                @Suppress("DEPRECATION")
+                if (am.isBluetoothScoAvailableOffCall) {
+                    am.startBluetoothSco()
+                    am.isBluetoothScoOn = true
+                    Log.d("ReSpeakService", "setupAudioRouting: Legacy startBluetoothSco() called as fallback")
+                }
             }
         } else {
             @Suppress("DEPRECATION")
             if (am.isBluetoothScoAvailableOffCall) {
                 am.startBluetoothSco()
                 am.isBluetoothScoOn = true
+                Log.d("ReSpeakService", "setupAudioRouting: startBluetoothSco (pre-Android 12)")
+            } else {
+                Log.w("ReSpeakService", "setupAudioRouting: Bluetooth SCO not available off-call")
             }
         }
     }

@@ -23,9 +23,11 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
+import android.media.audiofx.AutomaticGainControl
 import android.os.Build
 import android.os.Process
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +45,7 @@ class AudioEngine(private val context: Context) {
 
     private var echoCanceler: AcousticEchoCanceler? = null
     private var noiseSuppressor: NoiseSuppressor? = null
+    private var automaticGainControl: AutomaticGainControl? = null
 
     private val _amplitude = MutableStateFlow(0f)
     val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
@@ -69,7 +72,9 @@ class AudioEngine(private val context: Context) {
     private fun runLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
 
-        val sampleRate = 48000
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val nativeSampleRateStr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+        val sampleRate = nativeSampleRateStr?.toIntOrNull() ?: 48000
         val channelConfigIn = AudioFormat.CHANNEL_IN_MONO
         val channelConfigOut = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -78,48 +83,66 @@ class AudioEngine(private val context: Context) {
         val minBufSizeOut = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
         val bufferSize = Math.max(minBufSizeIn, minBufSizeOut) * 2
 
-        val audioSource = if (usePhoneMic) {
-            MediaRecorder.AudioSource.MIC
-        } else {
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION
-        }
+        // Use VOICE_RECOGNITION source — it is optimized for high-fidelity speech capture
+        // without the aggressive system-level voice-call noise-gating or echo-cancellation
+        // that filters out syllables and cuts off fast speech. Bluetooth mic routing
+        // is handled by setPreferredDevice() below.
+        val audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION
 
         try {
-            audioRecord = AudioRecord(
-                audioSource,
-                sampleRate,
-                channelConfigIn,
-                audioFormat,
-                bufferSize
-            )
+            audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                AudioRecord.Builder()
+                    .setAudioSource(audioSource)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(audioFormat)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelConfigIn)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                AudioRecord(
+                    audioSource,
+                    sampleRate,
+                    channelConfigIn,
+                    audioFormat,
+                    bufferSize
+                )
+            }
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 throw IOException("AudioRecord failed to initialize")
             }
 
-            val sessionId = audioRecord?.audioSessionId ?: 0
-            if (sessionId != 0) {
-                if (AcousticEchoCanceler.isAvailable()) {
-                    echoCanceler = AcousticEchoCanceler.create(sessionId)
-                    echoCanceler?.enabled = true
+            // Explicitly route AudioRecord to Bluetooth mic when available
+            if (!usePhoneMic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val inputDevices = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                val btInputDevice = inputDevices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                            it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
                 }
-                if (NoiseSuppressor.isAvailable()) {
-                    noiseSuppressor = NoiseSuppressor.create(sessionId)
-                    noiseSuppressor?.enabled = true
+                if (btInputDevice != null) {
+                    val routed = audioRecord?.setPreferredDevice(btInputDevice)
+                    android.util.Log.d("AudioEngine", "setPreferredDevice to BT mic: type=${btInputDevice.type}, name=${btInputDevice.productName}, success=$routed")
+                } else {
+                    android.util.Log.w("AudioEngine", "No Bluetooth input device found in system devices list")
                 }
             }
 
-            val usage = if (usePhoneMic) {
-                android.media.AudioAttributes.USAGE_MEDIA
-            } else {
-                android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
-            }
+            // Disabling AcousticEchoCanceler (AEC), NoiseSuppressor (NS), and AutomaticGainControl (AGC).
+            // These filters run heavy background-estimation algorithms that misidentify fast speech
+            // as background noise, resulting in gated audio and cut-off words.
+            // Since headphones/earbuds are always connected (preventing acoustic feedback),
+            // we can safely capture and loop back raw speech instantly.
 
-            val streamType = if (usePhoneMic) {
-                AudioManager.STREAM_MUSIC
-            } else {
-                AudioManager.STREAM_VOICE_CALL
-            }
+            // Always use USAGE_MEDIA and STREAM_MUSIC to bypass low call-volume limits
+            // and utilize the phone's full Media Volume path for maximum loudness on headphones.
+            val usage = android.media.AudioAttributes.USAGE_MEDIA
+            val streamType = AudioManager.STREAM_MUSIC
 
             audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 AudioTrack.Builder()
@@ -156,14 +179,29 @@ class AudioEngine(private val context: Context) {
                 throw IOException("AudioTrack failed to initialize")
             }
 
+            // Set AudioTrack volume to maximum
+            audioTrack?.setVolume(AudioTrack.getMaxVolume())
+
             audioRecord?.startRecording()
             audioTrack?.play()
 
-            val buffer = ShortArray(bufferSize / 2)
+            // Query native buffer size to prevent under/overflow dropouts (missing words)
+            val nativeBufferSizeStr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+            val nativeBufferSize = nativeBufferSizeStr?.toIntOrNull() ?: 256
+            val chunkSize = nativeBufferSize.coerceIn(256, 512)
+            val buffer = ShortArray(chunkSize)
+            val gain = 8.0f // Gain multiplier (8x digital boost for high loudness)
+
+            android.util.Log.d("AudioEngine", "Starting loop with chunkSize=$chunkSize, gain=$gain")
 
             while (isLooping && !Thread.currentThread().isInterrupted) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                 if (read > 0) {
+                    // Apply digital gain boost
+                    for (i in 0 until read) {
+                        val amplified = (buffer[i] * gain).toInt()
+                        buffer[i] = amplified.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                    }
                     audioTrack?.write(buffer, 0, read)
                     calculateAmplitude(buffer, read)
                 }
@@ -192,6 +230,8 @@ class AudioEngine(private val context: Context) {
             echoCanceler = null
             noiseSuppressor?.release()
             noiseSuppressor = null
+            automaticGainControl?.release()
+            automaticGainControl = null
 
             audioRecord?.stop()
             audioRecord?.release()
