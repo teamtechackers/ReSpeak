@@ -23,6 +23,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
@@ -112,6 +113,22 @@ class AudioEngine(private val context: Context) {
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 throw IOException("AudioRecord failed to initialize")
+            }
+
+            // Explicitly route AudioRecord to Bluetooth mic when available
+            if (!usePhoneMic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val inputDevices = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                val btInputDevice = inputDevices.firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                            it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                }
+                if (btInputDevice != null) {
+                    val routed = audioRecord?.setPreferredDevice(btInputDevice)
+                    android.util.Log.d("AudioEngine", "setPreferredDevice to BT mic: type=${btInputDevice.type}, name=${btInputDevice.productName}, success=$routed")
+                } else {
+                    android.util.Log.w("AudioEngine", "No Bluetooth input device found in system devices list")
+                }
             }
 
             val sessionId = audioRecord?.audioSessionId ?: 0
