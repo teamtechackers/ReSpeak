@@ -69,7 +69,9 @@ class AudioEngine(private val context: Context) {
     private fun runLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
 
-        val sampleRate = 48000
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val nativeSampleRateStr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+        val sampleRate = nativeSampleRateStr?.toIntOrNull() ?: 48000
         val channelConfigIn = AudioFormat.CHANNEL_IN_MONO
         val channelConfigOut = AudioFormat.CHANNEL_OUT_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -85,13 +87,29 @@ class AudioEngine(private val context: Context) {
         }
 
         try {
-            audioRecord = AudioRecord(
-                audioSource,
-                sampleRate,
-                channelConfigIn,
-                audioFormat,
-                bufferSize
-            )
+            audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AudioRecord.Builder()
+                    .setAudioSource(audioSource)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(audioFormat)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(channelConfigIn)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .setPerformanceMode(AudioRecord.PERFORMANCE_MODE_LOW_LATENCY)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                AudioRecord(
+                    audioSource,
+                    sampleRate,
+                    channelConfigIn,
+                    audioFormat,
+                    bufferSize
+                )
+            }
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 throw IOException("AudioRecord failed to initialize")
@@ -159,7 +177,8 @@ class AudioEngine(private val context: Context) {
             audioRecord?.startRecording()
             audioTrack?.play()
 
-            val buffer = ShortArray(bufferSize / 2)
+            val chunkSize = 256
+            val buffer = ShortArray(chunkSize)
 
             while (isLooping && !Thread.currentThread().isInterrupted) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1

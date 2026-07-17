@@ -196,7 +196,8 @@ class AudioLoopbackService : Service() {
             return
         }
 
-        this.usePhoneMic = usePhoneMic
+        val hasExternalMic = audioDeviceManager?.hasExternalMicrophone() == true
+        this.usePhoneMic = !hasExternalMic
 
         if (!requestAudioFocus()) {
             Log.d("ReSpeakService", "startLoopback failed: could not obtain audio focus.")
@@ -291,6 +292,9 @@ class AudioLoopbackService : Service() {
         _audioFocusLost.value = false
         startTimeMillis = System.currentTimeMillis() - (_durationSeconds.value * 1000)
         
+        val hasExternalMic = audioDeviceManager?.hasExternalMicrophone() == true
+        this.usePhoneMic = !hasExternalMic
+
         if (usePhoneMic) {
             audioManager?.mode = AudioManager.MODE_NORMAL
         } else {

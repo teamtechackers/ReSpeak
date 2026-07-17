@@ -74,6 +74,20 @@ class AudioDeviceManager(private val context: Context) {
         _connectedDeviceName.value = deviceName
     }
 
+    fun hasExternalMicrophone(): Boolean {
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+        for (device in devices) {
+            val type = device.type
+            if (type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                type == AudioDeviceInfo.TYPE_BLE_HEADSET) {
+                return true
+            }
+        }
+        return false
+    }
+
     private fun isHeadsetType(type: Int): Boolean {
         return type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
                 type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
