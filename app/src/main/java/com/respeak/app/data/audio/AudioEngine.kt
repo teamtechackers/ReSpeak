@@ -83,10 +83,11 @@ class AudioEngine(private val context: Context) {
         val minBufSizeOut = AudioTrack.getMinBufferSize(sampleRate, channelConfigOut, audioFormat)
         val bufferSize = Math.max(minBufSizeIn, minBufSizeOut) * 2
 
-        // Always use MIC source — VOICE_COMMUNICATION adds heavy system-level
-        // AEC/AGC/NS processing that causes 1-3s latency. Bluetooth mic routing
+        // Use VOICE_RECOGNITION source — it is optimized for high-fidelity speech capture
+        // without the aggressive system-level voice-call noise-gating or echo-cancellation
+        // that filters out syllables and cuts off fast speech. Bluetooth mic routing
         // is handled by setPreferredDevice() below.
-        val audioSource = MediaRecorder.AudioSource.MIC
+        val audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION
 
         try {
             audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -132,41 +133,16 @@ class AudioEngine(private val context: Context) {
                 }
             }
 
-            val sessionId = audioRecord?.audioSessionId ?: 0
-            if (sessionId != 0) {
-                if (usePhoneMic) {
-                    // Only enable AEC/NS when using phone mic (speaker feedback risk).
-                    if (AcousticEchoCanceler.isAvailable()) {
-                        echoCanceler = AcousticEchoCanceler.create(sessionId)
-                        echoCanceler?.enabled = true
-                    }
-                    if (NoiseSuppressor.isAvailable()) {
-                        noiseSuppressor = NoiseSuppressor.create(sessionId)
-                        noiseSuppressor?.enabled = true
-                    }
-                } else {
-                    // Enable AGC for external headsets to boost low mic input levels
-                    if (AutomaticGainControl.isAvailable()) {
-                        automaticGainControl = AutomaticGainControl.create(sessionId)
-                        automaticGainControl?.enabled = true
-                        android.util.Log.d("AudioEngine", "AutomaticGainControl enabled for BT/Headset mic")
-                    }
-                }
-            }
+            // Disabling AcousticEchoCanceler (AEC), NoiseSuppressor (NS), and AutomaticGainControl (AGC).
+            // These filters run heavy background-estimation algorithms that misidentify fast speech
+            // as background noise, resulting in gated audio and cut-off words.
+            // Since headphones/earbuds are always connected (preventing acoustic feedback),
+            // we can safely capture and loop back raw speech instantly.
 
-            // Route audio attributes correctly based on active mic.
-            // Bluetooth SCO requires VOICE_COMMUNICATION to utilize maximum hardware call volume.
-            val usage = if (usePhoneMic) {
-                android.media.AudioAttributes.USAGE_MEDIA
-            } else {
-                android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION
-            }
-
-            val streamType = if (usePhoneMic) {
-                AudioManager.STREAM_MUSIC
-            } else {
-                AudioManager.STREAM_VOICE_CALL
-            }
+            // Always use USAGE_MEDIA and STREAM_MUSIC to bypass low call-volume limits
+            // and utilize the phone's full Media Volume path for maximum loudness on headphones.
+            val usage = android.media.AudioAttributes.USAGE_MEDIA
+            val streamType = AudioManager.STREAM_MUSIC
 
             audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 AudioTrack.Builder()
@@ -214,7 +190,7 @@ class AudioEngine(private val context: Context) {
             val nativeBufferSize = nativeBufferSizeStr?.toIntOrNull() ?: 256
             val chunkSize = nativeBufferSize.coerceIn(256, 512)
             val buffer = ShortArray(chunkSize)
-            val gain = 5.0f // Gain multiplier (complements native AGC)
+            val gain = 8.0f // Gain multiplier (8x digital boost for high loudness)
 
             android.util.Log.d("AudioEngine", "Starting loop with chunkSize=$chunkSize, gain=$gain")
 
