@@ -87,7 +87,7 @@ class AudioEngine(private val context: Context) {
         }
 
         try {
-            audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioRecord = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 AudioRecord.Builder()
                     .setAudioSource(audioSource)
                     .setAudioFormat(
@@ -98,7 +98,6 @@ class AudioEngine(private val context: Context) {
                             .build()
                     )
                     .setBufferSizeInBytes(bufferSize)
-                    .setPerformanceMode(AudioRecord.PERFORMANCE_MODE_LOW_LATENCY)
                     .build()
             } else {
                 @Suppress("DEPRECATION")

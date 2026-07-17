@@ -19,8 +19,8 @@ This document details the engineering specifications, architectural requirements
 The loopback operates by reading PCM samples from `AudioRecord` and writing them instantly into `AudioTrack` on a dedicated high-priority audio thread. The exact routing is determined automatically based on the connected hardware:
 
 ### Automatic Mic Routing Selection
-* **Condition A (Headset has Mic):** If the connected device supports microphone input (e.g., `TYPE_WIRED_HEADSET`, `TYPE_USB_HEADSET`, or Bluetooth SCO/BLE headset), the app automatically routes to **Option 2: Headset Mic**.
-* **Condition B (Headphones only):** If the connected device does not have a built-in microphone (e.g., `TYPE_WIRED_HEADPHONES`, or standard Bluetooth A2DP headphones), the app automatically routes to **Option 1: Phone Mic**.
+* **Condition A (Headset has Mic):** If the connected device supports microphone input (e.g., `TYPE_WIRED_HEADSET`, `TYPE_USB_HEADSET`, Bluetooth SCO/BLE headset, or Bluetooth output earbuds connected via `TYPE_BLUETOOTH_A2DP` profile), the app automatically routes to **Option 2: Headset Mic**.
+* **Condition B (Headphones only):** If the connected device does not have a built-in microphone (e.g., wired output `TYPE_WIRED_HEADPHONES`), the app automatically routes to **Option 1: Phone Mic**.
 
 ### Option 1: Phone Mic (High Quality Mode)
 * **Audio Source:** `MediaRecorder.AudioSource.MIC`
